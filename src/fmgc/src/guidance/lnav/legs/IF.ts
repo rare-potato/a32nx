@@ -47,7 +47,7 @@ export class IFLeg extends XFLeg {
     }
 
     get outboundCourse(): Degrees | undefined {
-        return undefined;
+        return this.nextGuidable?.inboundCourse;
     }
 
     get distance(): NauticalMiles {

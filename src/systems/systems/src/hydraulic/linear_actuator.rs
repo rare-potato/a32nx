@@ -2037,6 +2037,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn spoiler_position_control_from_down_to_up_less_0_8s() {
+        let mut test_bed = SimulationTestBed::new(|_| {
+            TestAircraft::new(Duration::from_millis(10), spoiler_assembly())
+        });
+
+        test_bed.command(|a| a.command_unlock());
+        test_bed.command(|a| {
+            a.set_pressures([Pressure::new::<psi>(3000.)])
+        });
+
+        assert!(test_bed.query(|a| a.body_position()) < Ratio::new::<ratio>(0.01));
+
+        test_bed.command(|a| a.command_position_control(Ratio::new::<ratio>(1.), 0));
+        test_bed.run_with_delta(Duration::from_secs_f64(0.8));
+
+        assert!(test_bed.query(|a| a.body_position()) > Ratio::new::<ratio>(0.95));
+    }
+
     fn cargo_door_actuator(bounded_linear_length: &impl BoundedLinearLength) -> LinearActuator {
         const DEFAULT_I_GAIN: f64 = 5.;
         const DEFAULT_P_GAIN: f64 = 0.05;
@@ -2359,6 +2378,59 @@ mod tests {
             Angle::new::<degree>(47.),
             Angle::new::<degree>(-17.),
             100.,
+            false,
+            Vector3::new(1., 0., 0.),
+        )
+    }
+
+    fn spoiler_assembly() -> HydraulicLinearActuatorAssembly<1> {
+        let rigid_body = spoiler_body();
+        let actuator = spoiler_actuator(&rigid_body);
+
+        HydraulicLinearActuatorAssembly::new([actuator], rigid_body)
+    }
+
+    fn spoiler_actuator(bounded_linear_length: &impl BoundedLinearLength) -> LinearActuator {
+        const DEFAULT_I_GAIN: f64 = 1.;
+        const DEFAULT_P_GAIN: f64 = 0.15;
+        const DEFAULT_FORCE_GAIN: f64 = 450000.;
+
+        LinearActuator::new(
+            bounded_linear_length,
+            1,
+            Length::new::<meter>(0.03),
+            Length::new::<meter>(0.),
+            VolumeRate::new::<gallon_per_second>(0.03),
+            80000.,
+            1500.,
+            5000.,
+            800000.,
+            Duration::from_millis(300),
+            [1., 1., 1., 1., 1., 1.],
+            [0., 0.2, 0.21, 0.79, 0.8, 1.],
+            DEFAULT_P_GAIN,
+            DEFAULT_I_GAIN,
+            DEFAULT_FORCE_GAIN,
+        )
+    }
+
+    fn spoiler_body() -> LinearActuatedRigidBodyOnHingeAxis {
+        let size = Vector3::new(1.785, 0.1, 0.685);
+        let cg_offset = Vector3::new(0., 0., -0.5 * size[2]);
+
+        let control_arm = Vector3::new(0., -0.067 * size[2], -0.26 * size[2]);
+        let anchor = Vector3::new(0., -0.26 * size[2], 0.26 * size[2]);
+
+        LinearActuatedRigidBodyOnHingeAxis::new(
+            Mass::new::<kilogram>(16.),
+            size,
+            cg_offset,
+            control_arm,
+            anchor,
+            Angle::new::<degree>(-10.),
+            Angle::new::<degree>(40.),
+            Angle::new::<degree>(-10.),
+            50.,
             false,
             Vector3::new(1., 0., 0.),
         )

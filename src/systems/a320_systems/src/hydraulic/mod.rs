@@ -343,9 +343,9 @@ impl A320AileronFactory {
         )
     }
 
-    fn new_aileron(context: &mut InitContext, id: SurfaceId) -> AileronElevatorAssembly {
+    fn new_aileron(context: &mut InitContext, id: ActuatorSide) -> AileronAssembly {
         let assembly = A320AileronFactory::a320_aileron_assembly();
-        AileronElevatorAssembly::new(
+        AileronAssembly::new(
             context,
             id,
             assembly,
@@ -355,6 +355,120 @@ impl A320AileronFactory {
 
     fn new_a320_aileron_aero_model() -> AerodynamicModel {
         let body = A320AileronFactory::a320_aileron_body();
+        AerodynamicModel::new(
+            &body,
+            Some(Vector3::new(0., 1., 0.)),
+            Some(Vector3::new(0., 0., 1.)),
+            Some(Vector3::new(0., 1., 0.)),
+        )
+    }
+}
+
+struct A320SpoilerFactory {}
+impl A320SpoilerFactory {
+    const FLOW_CONTROL_PROPORTIONAL_GAIN: f64 = 0.15;
+    const FLOW_CONTROL_INTEGRAL_GAIN: f64 = 2.;
+    const FLOW_CONTROL_FORCE_GAIN: f64 = 450000.;
+
+    const MAX_DAMPING_CONSTANT_FOR_SLOW_DAMPING: f64 = 400000.;
+
+    const MAX_FLOW_GAL_P_S: f64 = 0.03;
+    const MAX_FLOW_PRECISION_PER_ACTUATOR_PERCENT: f64 = 3.;
+
+    fn a320_spoiler_actuator(bounded_linear_length: &impl BoundedLinearLength) -> LinearActuator {
+        let randomized_damping = random_from_range(
+            Self::MAX_DAMPING_CONSTANT_FOR_SLOW_DAMPING / 5.,
+            Self::MAX_DAMPING_CONSTANT_FOR_SLOW_DAMPING,
+        );
+
+        let random_max_flow_margin =
+            Self::MAX_FLOW_GAL_P_S * Self::MAX_FLOW_PRECISION_PER_ACTUATOR_PERCENT / 100.;
+        let random_max_flow_gal_per_s = random_from_range(
+            Self::MAX_FLOW_GAL_P_S - random_max_flow_margin,
+            Self::MAX_FLOW_GAL_P_S + random_max_flow_margin,
+        );
+
+        LinearActuator::new(
+            bounded_linear_length,
+            1,
+            Length::new::<meter>(0.03),
+            Length::new::<meter>(0.),
+            VolumeRate::new::<gallon_per_second>(random_max_flow_gal_per_s),
+            80000.,
+            1500.,
+            5000.,
+            randomized_damping,
+            Duration::from_millis(300),
+            [1., 1., 1., 1., 1., 1.],
+            [0., 0.2, 0.21, 0.79, 0.8, 1.],
+            Self::FLOW_CONTROL_PROPORTIONAL_GAIN,
+            Self::FLOW_CONTROL_INTEGRAL_GAIN,
+            Self::FLOW_CONTROL_FORCE_GAIN,
+        )
+    }
+
+    /// Builds a spoiler control surface body for A320 Neo
+    fn a320_spoiler_body() -> LinearActuatedRigidBodyOnHingeAxis {
+        let size = Vector3::new(1.785, 0.1, 0.685);
+        let cg_offset = Vector3::new(0., 0., -0.5 * size[2]);
+
+        let control_arm = Vector3::new(0., -0.067 * size[2], -0.26 * size[2]);
+        let anchor = Vector3::new(0., -0.26 * size[2], 0.26 * size[2]);
+
+        LinearActuatedRigidBodyOnHingeAxis::new(
+            Mass::new::<kilogram>(16.),
+            size,
+            cg_offset,
+            control_arm,
+            anchor,
+            Angle::new::<degree>(-10.),
+            Angle::new::<degree>(40.),
+            Angle::new::<degree>(-10.),
+            50.,
+            false,
+            Vector3::new(1., 0., 0.),
+        )
+    }
+
+    /// Builds a spoiler assembly consisting of the spoiler physical rigid body and one hydraulic actuator
+    fn a320_spoiler_assembly() -> HydraulicLinearActuatorAssembly<1> {
+        let spoiler_body = A320SpoilerFactory::a320_spoiler_body();
+
+        let spoiler_actuator = A320SpoilerFactory::a320_spoiler_actuator(&spoiler_body);
+
+        HydraulicLinearActuatorAssembly::new([spoiler_actuator], spoiler_body)
+    }
+
+    fn new_a320_spoiler_group(context: &mut InitContext, id: ActuatorSide) -> SpoilerGroup {
+        let spoiler_1 = A320SpoilerFactory::new_a320_spoiler_element(context, id, 1);
+        let spoiler_2 = A320SpoilerFactory::new_a320_spoiler_element(context, id, 2);
+        let spoiler_3 = A320SpoilerFactory::new_a320_spoiler_element(context, id, 3);
+        let spoiler_4 = A320SpoilerFactory::new_a320_spoiler_element(context, id, 4);
+        let spoiler_5 = A320SpoilerFactory::new_a320_spoiler_element(context, id, 5);
+
+        SpoilerGroup::new(
+            context,
+            [spoiler_1, spoiler_2, spoiler_3, spoiler_4, spoiler_5],
+        )
+    }
+
+    fn new_a320_spoiler_element(
+        context: &mut InitContext,
+        id: ActuatorSide,
+        id_number: usize,
+    ) -> SpoilerElement {
+        let assembly = A320SpoilerFactory::a320_spoiler_assembly();
+        SpoilerElement::new(
+            context,
+            id,
+            id_number,
+            assembly,
+            A320SpoilerFactory::new_a320_spoiler_aero_model(),
+        )
+    }
+
+    fn new_a320_spoiler_aero_model() -> AerodynamicModel {
+        let body = A320SpoilerFactory::a320_spoiler_body();
         AerodynamicModel::new(
             &body,
             Some(Vector3::new(0., 1., 0.)),
@@ -435,9 +549,9 @@ impl A320ElevatorFactory {
         )
     }
 
-    fn new_elevator(context: &mut InitContext, id: SurfaceId) -> AileronElevatorAssembly {
+    fn new_elevator(context: &mut InitContext, id: ActuatorSide) -> ElevatorAssembly {
         let assembly = A320ElevatorFactory::a320_elevator_assembly();
-        AileronElevatorAssembly::new(
+        ElevatorAssembly::new(
             context,
             id,
             assembly,
@@ -612,13 +726,17 @@ pub(super) struct A320Hydraulic {
     aft_cargo_door_controller: A320DoorController,
 
     elac_computer: ElacComputer,
-    left_aileron: AileronElevatorAssembly,
-    right_aileron: AileronElevatorAssembly,
-    left_elevator: AileronElevatorAssembly,
-    right_elevator: AileronElevatorAssembly,
+    left_aileron: AileronAssembly,
+    right_aileron: AileronAssembly,
+    left_elevator: ElevatorAssembly,
+    right_elevator: ElevatorAssembly,
 
     fac_computer: FacComputer,
     rudder: RudderAssembly,
+
+    spoiler_computer: SpoilerComputer,
+    left_spoilers: SpoilerGroup,
+    right_spoilers: SpoilerGroup,
 }
 impl A320Hydraulic {
     const FLAP_FFPU_TO_SURFACE_ANGLE_BREAKPTS: [f64; 12] = [
@@ -827,13 +945,20 @@ impl A320Hydraulic {
             aft_cargo_door_controller: A320DoorController::new(context, Self::AFT_CARGO_DOOR_ID),
 
             elac_computer: ElacComputer::new(context),
-            left_aileron: A320AileronFactory::new_aileron(context, SurfaceId::LeftAileron),
-            right_aileron: A320AileronFactory::new_aileron(context, SurfaceId::RightAileron),
-            left_elevator: A320ElevatorFactory::new_elevator(context, SurfaceId::LeftElevator),
-            right_elevator: A320ElevatorFactory::new_elevator(context, SurfaceId::RightElevator),
+            left_aileron: A320AileronFactory::new_aileron(context, ActuatorSide::Left),
+            right_aileron: A320AileronFactory::new_aileron(context, ActuatorSide::Right),
+            left_elevator: A320ElevatorFactory::new_elevator(context, ActuatorSide::Left),
+            right_elevator: A320ElevatorFactory::new_elevator(context, ActuatorSide::Right),
 
             fac_computer: FacComputer::new(context),
             rudder: A320RudderFactory::new_rudder(context),
+
+            spoiler_computer: SpoilerComputer::new(context),
+            left_spoilers: A320SpoilerFactory::new_a320_spoiler_group(context, ActuatorSide::Left),
+            right_spoilers: A320SpoilerFactory::new_a320_spoiler_group(
+                context,
+                ActuatorSide::Right,
+            ),
         }
     }
 
@@ -1009,6 +1134,22 @@ impl A320Hydraulic {
             self.blue_circuit.system_pressure(),
             self.yellow_circuit.system_pressure(),
         );
+
+        self.left_spoilers.update(
+            context,
+            self.spoiler_computer.left_controllers(),
+            self.green_circuit.system_pressure(),
+            self.blue_circuit.system_pressure(),
+            self.yellow_circuit.system_pressure(),
+        );
+
+        self.right_spoilers.update(
+            context,
+            self.spoiler_computer.right_controllers(),
+            self.green_circuit.system_pressure(),
+            self.blue_circuit.system_pressure(),
+            self.yellow_circuit.system_pressure(),
+        );
     }
 
     // Updates at the same rate as the sim or at a fixed maximum time step if sim rate is too slow
@@ -1163,16 +1304,16 @@ impl A320Hydraulic {
 
         self.green_circuit.update_actuator_volumes(
             self.left_aileron
-                .actuator(AileronElevatorActuatorPosition::Inboard),
+                .actuator(AileronActuatorPosition::Inboard),
         );
         self.green_circuit.update_actuator_volumes(
             self.right_aileron
-                .actuator(AileronElevatorActuatorPosition::Inboard),
+                .actuator(AileronActuatorPosition::Inboard),
         );
 
         self.green_circuit.update_actuator_volumes(
             self.left_elevator
-                .actuator(AileronElevatorActuatorPosition::Inboard),
+                .actuator(ElevatorActuatorPosition::Inboard),
         );
 
         self.green_circuit
@@ -1182,6 +1323,16 @@ impl A320Hydraulic {
             .update_actuator_volumes(self.flap_system.left_motor());
         self.green_circuit
             .update_actuator_volumes(self.slat_system.right_motor());
+
+        self.green_circuit
+            .update_actuator_volumes(self.left_spoilers.actuator(0));
+        self.green_circuit
+            .update_actuator_volumes(self.left_spoilers.actuator(4));
+
+        self.green_circuit
+            .update_actuator_volumes(self.right_spoilers.actuator(0));
+        self.green_circuit
+            .update_actuator_volumes(self.right_spoilers.actuator(4));
     }
 
     fn update_yellow_actuators_volume(&mut self) {
@@ -1202,11 +1353,21 @@ impl A320Hydraulic {
 
         self.yellow_circuit.update_actuator_volumes(
             self.right_elevator
-                .actuator(AileronElevatorActuatorPosition::Inboard),
+                .actuator(ElevatorActuatorPosition::Inboard),
         );
 
         self.yellow_circuit
             .update_actuator_volumes(self.rudder.actuator(RudderActuatorPosition::Yellow));
+
+        self.yellow_circuit
+            .update_actuator_volumes(self.left_spoilers.actuator(1));
+        self.yellow_circuit
+            .update_actuator_volumes(self.left_spoilers.actuator(3));
+
+        self.yellow_circuit
+            .update_actuator_volumes(self.right_spoilers.actuator(1));
+        self.yellow_circuit
+            .update_actuator_volumes(self.right_spoilers.actuator(3));
     }
 
     fn update_blue_actuators_volume(&mut self) {
@@ -1217,24 +1378,30 @@ impl A320Hydraulic {
 
         self.blue_circuit.update_actuator_volumes(
             self.left_aileron
-                .actuator(AileronElevatorActuatorPosition::Outboard),
+                .actuator(AileronActuatorPosition::Outboard),
         );
         self.blue_circuit.update_actuator_volumes(
             self.right_aileron
-                .actuator(AileronElevatorActuatorPosition::Outboard),
+                .actuator(AileronActuatorPosition::Outboard),
         );
 
         self.blue_circuit.update_actuator_volumes(
             self.left_elevator
-                .actuator(AileronElevatorActuatorPosition::Outboard),
+                .actuator(ElevatorActuatorPosition::Outboard),
         );
         self.blue_circuit.update_actuator_volumes(
             self.right_elevator
-                .actuator(AileronElevatorActuatorPosition::Outboard),
+                .actuator(ElevatorActuatorPosition::Outboard),
         );
 
         self.blue_circuit
             .update_actuator_volumes(self.rudder.actuator(RudderActuatorPosition::Blue));
+
+        self.blue_circuit
+            .update_actuator_volumes(self.left_spoilers.actuator(2));
+
+        self.blue_circuit
+            .update_actuator_volumes(self.right_spoilers.actuator(2));
     }
 
     // All the core hydraulics updates that needs to be done at the slowest fixed step rate
@@ -1498,6 +1665,10 @@ impl SimulationElement for A320Hydraulic {
 
         self.fac_computer.accept(visitor);
         self.rudder.accept(visitor);
+
+        self.spoiler_computer.accept(visitor);
+        self.left_spoilers.accept(visitor);
+        self.right_spoilers.accept(visitor);
 
         visitor.visit(self);
     }
@@ -3511,22 +3682,22 @@ impl ElacComputer {
     ) {
         match hydraulic_configuration {
             AileronHydConfiguration::GB | AileronHydConfiguration::B => {
-                self.left_aileron_controllers[AileronElevatorActuatorPosition::Outboard as usize]
+                self.left_aileron_controllers[AileronActuatorPosition::Outboard as usize]
                     .set_mode(LinearActuatorMode::PositionControl);
-                self.left_aileron_controllers[AileronElevatorActuatorPosition::Inboard as usize]
+                self.left_aileron_controllers[AileronActuatorPosition::Inboard as usize]
                     .set_mode(LinearActuatorMode::ActiveDamping);
             }
 
             AileronHydConfiguration::G => {
-                self.left_aileron_controllers[AileronElevatorActuatorPosition::Outboard as usize]
+                self.left_aileron_controllers[AileronActuatorPosition::Outboard as usize]
                     .set_mode(LinearActuatorMode::ActiveDamping);
-                self.left_aileron_controllers[AileronElevatorActuatorPosition::Inboard as usize]
+                self.left_aileron_controllers[AileronActuatorPosition::Inboard as usize]
                     .set_mode(LinearActuatorMode::PositionControl);
             }
             AileronHydConfiguration::NoHyd => {
-                self.left_aileron_controllers[AileronElevatorActuatorPosition::Outboard as usize]
+                self.left_aileron_controllers[AileronActuatorPosition::Outboard as usize]
                     .set_mode(LinearActuatorMode::ClosedCircuitDamping);
-                self.left_aileron_controllers[AileronElevatorActuatorPosition::Inboard as usize]
+                self.left_aileron_controllers[AileronActuatorPosition::Inboard as usize]
                     .set_mode(LinearActuatorMode::ClosedCircuitDamping);
             }
         }
@@ -3538,22 +3709,22 @@ impl ElacComputer {
     ) {
         match hydraulic_configuration {
             AileronHydConfiguration::GB | AileronHydConfiguration::G => {
-                self.right_aileron_controllers[AileronElevatorActuatorPosition::Outboard as usize]
+                self.right_aileron_controllers[AileronActuatorPosition::Outboard as usize]
                     .set_mode(LinearActuatorMode::ActiveDamping);
-                self.right_aileron_controllers[AileronElevatorActuatorPosition::Inboard as usize]
+                self.right_aileron_controllers[AileronActuatorPosition::Inboard as usize]
                     .set_mode(LinearActuatorMode::PositionControl);
             }
 
             AileronHydConfiguration::B => {
-                self.right_aileron_controllers[AileronElevatorActuatorPosition::Outboard as usize]
+                self.right_aileron_controllers[AileronActuatorPosition::Outboard as usize]
                     .set_mode(LinearActuatorMode::PositionControl);
-                self.right_aileron_controllers[AileronElevatorActuatorPosition::Inboard as usize]
+                self.right_aileron_controllers[AileronActuatorPosition::Inboard as usize]
                     .set_mode(LinearActuatorMode::ActiveDamping);
             }
             _ => {
-                self.right_aileron_controllers[AileronElevatorActuatorPosition::Outboard as usize]
+                self.right_aileron_controllers[AileronActuatorPosition::Outboard as usize]
                     .set_mode(LinearActuatorMode::ClosedCircuitDamping);
-                self.right_aileron_controllers[AileronElevatorActuatorPosition::Inboard as usize]
+                self.right_aileron_controllers[AileronActuatorPosition::Inboard as usize]
                     .set_mode(LinearActuatorMode::ClosedCircuitDamping);
             }
         }
@@ -3875,15 +4046,19 @@ impl SimulationElement for FacComputer {
 }
 
 #[derive(PartialEq, Clone, Copy)]
-enum SurfaceId {
-    LeftAileron,
-    RightAileron,
-    LeftElevator,
-    RightElevator,
+enum ActuatorSide {
+    Left,
+    Right,
 }
 
 #[derive(PartialEq, Clone, Copy)]
-enum AileronElevatorActuatorPosition {
+enum AileronActuatorPosition {
+    Outboard = 0,
+    Inboard = 1,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+enum ElevatorActuatorPosition {
     Outboard = 0,
     Inboard = 1,
 }
@@ -3904,7 +4079,7 @@ enum RightElevatorActuatorCircuit {
     Yellow = 1,
 }
 
-struct AileronElevatorAssembly {
+struct AileronAssembly {
     hydraulic_assembly: HydraulicLinearActuatorAssembly<2>,
 
     position_id: VariableIdentifier,
@@ -3913,27 +4088,21 @@ struct AileronElevatorAssembly {
 
     aerodynamic_model: AerodynamicModel,
 }
-impl AileronElevatorAssembly {
+impl AileronAssembly {
     fn new(
         context: &mut InitContext,
-        id: SurfaceId,
+        id: ActuatorSide,
         hydraulic_assembly: HydraulicLinearActuatorAssembly<2>,
         aerodynamic_model: AerodynamicModel,
     ) -> Self {
         Self {
             hydraulic_assembly,
             position_id: match id {
-                SurfaceId::LeftAileron => {
+                ActuatorSide::Left => {
                     context.get_identifier("HYD_AIL_LEFT_DEFLECTION".to_owned())
                 }
-                SurfaceId::RightAileron => {
+                ActuatorSide::Right => {
                     context.get_identifier("HYD_AIL_RIGHT_DEFLECTION".to_owned())
-                }
-                SurfaceId::LeftElevator => {
-                    context.get_identifier("HYD_ELEV_LEFT_DEFLECTION".to_owned())
-                }
-                SurfaceId::RightElevator => {
-                    context.get_identifier("HYD_ELEV_RIGHT_DEFLECTION".to_owned())
                 }
             },
             position: Ratio::new::<ratio>(0.),
@@ -3943,7 +4112,7 @@ impl AileronElevatorAssembly {
 
     fn actuator(
         &mut self,
-        circuit_position: AileronElevatorActuatorPosition,
+        circuit_position: AileronActuatorPosition,
     ) -> &mut impl Actuator {
         self.hydraulic_assembly.actuator(circuit_position as usize)
     }
@@ -3966,7 +4135,69 @@ impl AileronElevatorAssembly {
         self.position = self.hydraulic_assembly.position_normalized();
     }
 }
-impl SimulationElement for AileronElevatorAssembly {
+impl SimulationElement for AileronAssembly {
+    fn write(&self, writer: &mut SimulatorWriter) {
+        writer.write(&self.position_id, self.position.get::<ratio>());
+    }
+}
+
+struct ElevatorAssembly {
+    hydraulic_assembly: HydraulicLinearActuatorAssembly<2>,
+
+    position_id: VariableIdentifier,
+
+    position: Ratio,
+
+    aerodynamic_model: AerodynamicModel,
+}
+impl ElevatorAssembly {
+    fn new(
+        context: &mut InitContext,
+        id: ActuatorSide,
+        hydraulic_assembly: HydraulicLinearActuatorAssembly<2>,
+        aerodynamic_model: AerodynamicModel,
+    ) -> Self {
+        Self {
+            hydraulic_assembly,
+            position_id: match id {
+                ActuatorSide::Left => {
+                    context.get_identifier("HYD_ELEV_LEFT_DEFLECTION".to_owned())
+                }
+                ActuatorSide::Right => {
+                    context.get_identifier("HYD_ELEV_RIGHT_DEFLECTION".to_owned())
+                }
+            },
+            position: Ratio::new::<ratio>(0.),
+            aerodynamic_model,
+        }
+    }
+
+    fn actuator(
+        &mut self,
+        circuit_position: ElevatorActuatorPosition,
+    ) -> &mut impl Actuator {
+        self.hydraulic_assembly.actuator(circuit_position as usize)
+    }
+
+    fn update(
+        &mut self,
+        context: &UpdateContext,
+        aileron_controllers: &[impl HydraulicAssemblyController],
+        current_pressure_outboard: Pressure,
+        current_pressure_inboard: Pressure,
+    ) {
+        self.aerodynamic_model
+            .update_body(context, self.hydraulic_assembly.body());
+        self.hydraulic_assembly.update(
+            context,
+            aileron_controllers,
+            [current_pressure_outboard, current_pressure_inboard],
+        );
+
+        self.position = self.hydraulic_assembly.position_normalized();
+    }
+}
+impl SimulationElement for ElevatorAssembly {
     fn write(&self, writer: &mut SimulatorWriter) {
         writer.write(&self.position_id, self.position.get::<ratio>());
     }
@@ -4041,6 +4272,242 @@ impl RudderAssembly {
 impl SimulationElement for RudderAssembly {
     fn write(&self, writer: &mut SimulatorWriter) {
         writer.write(&self.name_id, self.position.get::<ratio>());
+    }
+}
+
+struct SpoilerElement {
+    hydraulic_assembly: HydraulicLinearActuatorAssembly<1>,
+
+    position_id: VariableIdentifier,
+
+    position: Ratio,
+
+    aerodynamic_model: AerodynamicModel,
+}
+impl SpoilerElement {
+    fn new(
+        context: &mut InitContext,
+        id: ActuatorSide,
+        id_num: usize,
+        hydraulic_assembly: HydraulicLinearActuatorAssembly<1>,
+        aerodynamic_model: AerodynamicModel,
+    ) -> Self {
+        Self {
+            hydraulic_assembly,
+            position_id: match id {
+                ActuatorSide::Left => {
+                    context.get_identifier(format!("HYD_SPOIL_{}_LEFT_DEFLECTION", id_num))
+                }
+                ActuatorSide::Right => {
+                    context.get_identifier(format!("HYD_SPOIL_{}_RIGHT_DEFLECTION", id_num))
+                }
+            },
+            position: Ratio::new::<ratio>(0.),
+            aerodynamic_model,
+        }
+    }
+
+    fn actuator(&mut self) -> &mut impl Actuator {
+        self.hydraulic_assembly.actuator(0)
+    }
+
+    fn update(
+        &mut self,
+        context: &UpdateContext,
+        spoiler_controller: &impl HydraulicAssemblyController,
+        current_pressure: Pressure,
+    ) {
+        self.aerodynamic_model
+            .update_body(context, self.hydraulic_assembly.body());
+        self.hydraulic_assembly.update(
+            context,
+            std::slice::from_ref(spoiler_controller),
+            [current_pressure],
+        );
+
+        self.position = self.hydraulic_assembly.position_normalized();
+    }
+}
+impl SimulationElement for SpoilerElement {
+    fn write(&self, writer: &mut SimulatorWriter) {
+        writer.write(&self.position_id, self.position.get::<ratio>());
+    }
+}
+
+struct SpoilerGroup {
+    spoilers: [SpoilerElement; 5],
+}
+impl SpoilerGroup {
+    fn new(context: &mut InitContext, spoilers: [SpoilerElement; 5]) -> Self {
+        Self { spoilers }
+    }
+
+    fn update(
+        &mut self,
+        context: &UpdateContext,
+        spoiler_controllers: &[impl HydraulicAssemblyController],
+        green_pressure: Pressure,
+        blue_pressure: Pressure,
+        yellow_pressure: Pressure,
+    ) {
+        self.spoilers[0].update(context, &spoiler_controllers[0], green_pressure);
+        self.spoilers[1].update(context, &spoiler_controllers[1], yellow_pressure);
+        self.spoilers[2].update(context, &spoiler_controllers[2], blue_pressure);
+        self.spoilers[3].update(context, &spoiler_controllers[3], yellow_pressure);
+        self.spoilers[4].update(context, &spoiler_controllers[4], green_pressure);
+
+        // println!(
+        //     "ACTUATORS {:.2} {:.2} {:.2} {:.2} {:.2}",
+        //     self.spoilers[0].position.get::<ratio>(),
+        //     self.spoilers[1].position.get::<ratio>(),
+        //     self.spoilers[2].position.get::<ratio>(),
+        //     self.spoilers[3].position.get::<ratio>(),
+        //     self.spoilers[4].position.get::<ratio>(),
+        // );
+    }
+
+    fn actuator(&mut self, spoiler_id: usize) -> &mut impl Actuator {
+        self.spoilers[spoiler_id].actuator()
+    }
+}
+impl SimulationElement for SpoilerGroup {
+    fn accept<T: SimulationElementVisitor>(&mut self, visitor: &mut T) {
+        for spoiler in &mut self.spoilers {
+            spoiler.accept(visitor);
+        }
+
+        visitor.visit(self);
+    }
+}
+
+#[derive(PartialEq, Clone, Copy)]
+struct SpoilerController {
+    mode: LinearActuatorMode,
+    requested_position: Ratio,
+}
+impl SpoilerController {
+    fn new() -> Self {
+        Self {
+            mode: LinearActuatorMode::PositionControl,
+
+            requested_position: Ratio::new::<ratio>(0.),
+        }
+    }
+
+    /// Receives a [0;1] position request, 0 is down 1 is up
+    fn set_requested_position(&mut self, requested_position: Ratio) {
+        self.requested_position = requested_position
+            .min(Ratio::new::<ratio>(1.))
+            .max(Ratio::new::<ratio>(0.));
+    }
+}
+impl HydraulicAssemblyController for SpoilerController {
+    fn requested_mode(&self) -> LinearActuatorMode {
+        LinearActuatorMode::PositionControl
+    }
+
+    fn requested_position(&self) -> Ratio {
+        self.requested_position
+    }
+
+    fn should_lock(&self) -> bool {
+        false
+    }
+
+    fn requested_lock_position(&self) -> Ratio {
+        Ratio::default()
+    }
+}
+
+struct SpoilerComputer {
+    requested_position_left_1_id: VariableIdentifier,
+    requested_position_left_2_id: VariableIdentifier,
+    requested_position_left_3_id: VariableIdentifier,
+    requested_position_left_4_id: VariableIdentifier,
+    requested_position_left_5_id: VariableIdentifier,
+
+    requested_position_right_1_id: VariableIdentifier,
+    requested_position_right_2_id: VariableIdentifier,
+    requested_position_right_3_id: VariableIdentifier,
+    requested_position_right_4_id: VariableIdentifier,
+    requested_position_right_5_id: VariableIdentifier,
+
+    left_positions_requested: [Ratio; 5],
+    right_positions_requested: [Ratio; 5],
+
+    left_controllers: [SpoilerController; 5],
+    right_controllers: [SpoilerController; 5],
+}
+impl SpoilerComputer {
+    fn new(context: &mut InitContext) -> Self {
+        Self {
+            requested_position_left_1_id: context
+                .get_identifier("HYD_SPOILER_1_LEFT_DEMAND".to_owned()),
+            requested_position_left_2_id: context
+                .get_identifier("HYD_SPOILER_2_LEFT_DEMAND".to_owned()),
+            requested_position_left_3_id: context
+                .get_identifier("HYD_SPOILER_3_LEFT_DEMAND".to_owned()),
+            requested_position_left_4_id: context
+                .get_identifier("HYD_SPOILER_4_LEFT_DEMAND".to_owned()),
+            requested_position_left_5_id: context
+                .get_identifier("HYD_SPOILER_5_LEFT_DEMAND".to_owned()),
+
+            requested_position_right_1_id: context
+                .get_identifier("HYD_SPOILER_1_RIGHT_DEMAND".to_owned()),
+            requested_position_right_2_id: context
+                .get_identifier("HYD_SPOILER_2_RIGHT_DEMAND".to_owned()),
+            requested_position_right_3_id: context
+                .get_identifier("HYD_SPOILER_3_RIGHT_DEMAND".to_owned()),
+            requested_position_right_4_id: context
+                .get_identifier("HYD_SPOILER_4_RIGHT_DEMAND".to_owned()),
+            requested_position_right_5_id: context
+                .get_identifier("HYD_SPOILER_5_RIGHT_DEMAND".to_owned()),
+
+            left_positions_requested: [Ratio::default(); 5],
+            right_positions_requested: [Ratio::default(); 5],
+
+            // Controllers are in outward->inward order
+            left_controllers: [SpoilerController::new(); 5],
+            right_controllers: [SpoilerController::new(); 5],
+        }
+    }
+
+    fn update_spoilers_requested_position(&mut self) {
+        for (idx, controller) in &mut self.left_controllers.iter_mut().enumerate() {
+            controller.set_requested_position(self.left_positions_requested[idx]);
+        }
+
+        for (idx, controller) in &mut self.right_controllers.iter_mut().enumerate() {
+            controller.set_requested_position(self.right_positions_requested[idx]);
+        }
+    }
+
+    fn left_controllers(&self) -> &[impl HydraulicAssemblyController] {
+        &self.left_controllers[..]
+    }
+
+    fn right_controllers(&self) -> &[impl HydraulicAssemblyController] {
+        &self.right_controllers[..]
+    }
+}
+impl SimulationElement for SpoilerComputer {
+    fn read(&mut self, reader: &mut SimulatorReader) {
+        self.left_positions_requested = [
+            Ratio::new::<ratio>(reader.read(&self.requested_position_left_1_id)),
+            Ratio::new::<ratio>(reader.read(&self.requested_position_left_2_id)),
+            Ratio::new::<ratio>(reader.read(&self.requested_position_left_3_id)),
+            Ratio::new::<ratio>(reader.read(&self.requested_position_left_4_id)),
+            Ratio::new::<ratio>(reader.read(&self.requested_position_left_5_id)),
+        ];
+        self.right_positions_requested = [
+            Ratio::new::<ratio>(reader.read(&self.requested_position_right_1_id)),
+            Ratio::new::<ratio>(reader.read(&self.requested_position_right_2_id)),
+            Ratio::new::<ratio>(reader.read(&self.requested_position_right_3_id)),
+            Ratio::new::<ratio>(reader.read(&self.requested_position_right_4_id)),
+            Ratio::new::<ratio>(reader.read(&self.requested_position_right_5_id)),
+        ];
+
+        self.update_spoilers_requested_position();
     }
 }
 

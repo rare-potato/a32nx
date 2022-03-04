@@ -6,6 +6,7 @@ mod elevators;
 mod flaps;
 mod nose_wheel_steering;
 mod rudder;
+mod spoilers;
 
 use a320_systems::A320;
 use ailerons::ailerons;
@@ -15,6 +16,7 @@ use elevators::elevators;
 use flaps::flaps;
 use nose_wheel_steering::nose_wheel_steering;
 use rudder::rudder;
+use spoilers::spoilers;
 use std::error::Error;
 use systems::shared::ElectricalBusType;
 use systems::{failures::FailureType, shared::HydraulicColor};
@@ -180,6 +182,7 @@ async fn systems(mut gauge: msfs::Gauge) -> Result<(), Box<dyn Error>> {
     .with_aspect(ailerons)?
     .with_aspect(elevators)?
     .with_aspect(rudder)?
+    .with_aspect(spoilers)?
     .build(A320::new)?;
 
     while let Some(event) = gauge.next_event().await {

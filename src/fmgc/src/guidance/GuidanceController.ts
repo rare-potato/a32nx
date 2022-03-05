@@ -265,7 +265,10 @@ export class GuidanceController {
      */
     updateGeometries() {
         this.updateActiveGeometry();
-        this.updateTemporaryGeometry();
+
+        if (this.flightPlanManager.getFlightPlan(FlightPlans.Temporary)) {
+            this.updateTemporaryGeometry();
+        }
 
         this.recomputeGeometries();
 
